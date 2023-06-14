@@ -22,31 +22,53 @@ import Elements.pyECSS.GA.quaternion as quat
 from gate_module_euclidean import *
 from pyassimp import load
 
-# VERT_PHONG_MVP = """
-#         #version 410
+VERT_PHONG_MVP = """
+        #version 410
 
-#         layout (location=0) in vec4 vPosition;
-#         layout (location=1) in vec4 vColor;
-#         layout (location=2) in vec4 vNormal;
-#         layout (location=3) in vec4 vWeight;
+        layout (location=0) in vec4 vPosition;
+        layout (location=1) in vec4 vColor;
+        layout (location=2) in vec4 vNormal;
+        layout (location=3) in vec4 vWeight;
+        layout (location=4) in vec4 vWID;
 
-#         out     vec4 pos;
-#         out     vec4 color;
-#         out     vec3 normal;
-        
-#         uniform mat4 modelViewProj;
-#         uniform mat4 model;
-#         uniform mat4 MM;
+        const int MAX_BONES = 100;
+        const int MAX_BONES_INF = 4;
 
-#         void main()
-#         {         
-#             pos = pos + vWeight * model * MM * vPosition;
-#             gl_Position = modelViewProj *  MM * vPosition;
-#             color = vColor;
-#             normal = mat3(transpose(inverse(model))) * vNormal.xyz;
-#         }
-#     """
+        uniform mat4 BB[MAX_BONES];
+        uniform mat4 MM1[MAX_BONES];
 
+        uniform mat4 modelViewProj;
+        uniform mat4 model;
+
+        out     vec4 pos;
+        out     vec4 color;
+        out     vec3 normal;
+
+        void main()
+        {         
+            vec4 newv = vec4(0.0f);
+
+            for (int i = 0; i < MAX_BONES_INF; i++) 
+            {
+                if(int(vWID[i]) >= 0) 
+                {   
+                    mat4 mat = BB[int(vWID[i])] * MM1[int(vWID[i])] ;
+                    vec4 temp = vPosition * mat;
+                    newv += vWeight[i] * temp;
+                }
+            }
+
+            gl_Position = modelViewProj * newv;
+            pos = model * newv;
+            color = vColor;
+            normal = mat3(transpose(inverse(model))) * vNormal.xyz;
+        }
+    """
+
+# mat4 mat = MM1[index] * BB[index];
+# newv += vWeight[i] * (vPosition * mat);
+                    # newv = vPosition;
+                    # break;
 
 def lerp(a, b, t):
     return (1 - t) * a + t * b
@@ -73,23 +95,19 @@ trans1 = scene.world.addComponent(entityCam1, BasicTransform(name="Entity1_TRS",
 eye = util.vec(1, 0.54, 1.0)
 target = util.vec(0.02, 0.14, 0.217)
 up = util.vec(0.0, 1.0, 0.0)
-view = util.lookat(eye, target, up)
-# projMat = util.ortho(-10.0, 10.0, -10.0, 10.0, -1.0, 10.0)  
-# projMat = util.perspective(90.0, 1.33, 0.1, 100)  
+view = util.lookat(eye, target, up)  
 projMat = util.perspective(50.0, 1.0, 1.0, 10.0)   
 m = np.linalg.inv(projMat @ view)
 
 entityCam2 = scene.world.createEntity(Entity(name="Entity_Camera"))
 scene.world.addEntityChild(entityCam1, entityCam2)
 trans2 = scene.world.addComponent(entityCam2, BasicTransform(name="Camera_TRS", trs=util.identity()))
-# orthoCam = scene.world.addComponent(entityCam2, Camera(util.ortho(-100.0, 100.0, -100.0, 100.0, 1.0, 100.0), "orthoCam","Camera","500"))
 orthoCam = scene.world.addComponent(entityCam2, Camera(m, "orthoCam","Camera","500"))
 
 node4 = scene.world.createEntity(Entity(name="Object"))
 scene.world.addEntityChild(rootEntity, node4)
 trans4 = scene.world.addComponent(node4, BasicTransform(name="Object_TRS", trs=util.scale(0.1)@util.translate(0,0,0) ))
 mesh4 = scene.world.addComponent(node4, RenderMesh(name="Object_mesh"))
-#skin4 = scene.world.addComponent(node4,SkinnedMesh(name="Object_skin"))
 key1 = scene.world.addComponent(node4, Keyframe(name="Object_key_1"))
 key2 = scene.world.addComponent(node4, Keyframe(name="Object_key_2"))
 
@@ -113,7 +131,7 @@ colorAxes = np.array([
 indexAxes = np.array((0,1,2,3,4,5), np.uint32) #3 simple colored Axes as R,G,B lines
 
 ##################################################################################################
-scene2 = load('D:/IMPORTANT_FILES/THESIS_2_0/Diplwmatikh/astroBoy_walk.dae')
+scene2 = load('C:/Users/user-P/Desktop/Elements_Home/thes/astroBoy_walk.dae')
 mesh_id = 3
 
 #Vertices, Incdices/Faces, Bones from the scene we loaded with pyassimp
@@ -146,39 +164,20 @@ M[1][0:3,3] = [0.5,0.5,0.5]
 key2.array_MM.append(read_tree(scene2,mesh_id,M,transform))
 
 BB = [b[i].offsetmatrix for i in range(len(b))]
-newv = np.zeros([(len(v)),3])
 
-alpha = 1
-MM1=[]
-
-for i in range(len(key1.rotate)):
-    MM1.append(np.eye(4))
-
-for i in range(len(key1.rotate)):
-    MM1[i][:3, :3] = quat.Quaternion.to_rotation_matrix(quat.quaternion_slerp(key1.rotate[i], key2.rotate[i], alpha))
-    MM1[i][:3, 3] = lerp(key1.translate[i], key2.translate[i], alpha)
-
-
-for i in range(len(v)):
-    for j in range(4):
-        if vw.id[i][j] >=0:
-            #mat = key2.array_MM[0][vw.id[i][j]] @ BB[vw.id[i][j]]     
-            mat = MM1[vw.id[i][j]] @ BB[vw.id[i][j]]       
-            newv[i] = newv[i] +  vw.weight[i][j]*(vertex_apply_M(v[i],mat))
-
-print(vw.id)
-#mesh4.vertex_attributes[0] = np.concatenate((newv, np.ones((newv.shape[0], 1))), axis=1)
+alpha = 0
+flag = False
 
 normals = norm.generateNormals(v2 , f2)
 
 mesh4.vertex_attributes.append(v2)
-mesh4.vertex_attributes[0] = np.concatenate((newv, np.ones((newv.shape[0], 1))), axis=1)
 mesh4.vertex_attributes.append(c)
 mesh4.vertex_attributes.append(normals)
 mesh4.vertex_attributes.append(vw.weight)
+mesh4.vertex_attributes.append(vw.id)
 mesh4.vertex_index.append(f2)
 vArray4 = scene.world.addComponent(node4, VertexArray())
-shaderDec4 = scene.world.addComponent(node4, ShaderGLDecorator(Shader(vertex_source = Shader.VERT_PHONG_MVP, fragment_source=Shader.FRAG_PHONG)))
+shaderDec4 = scene.world.addComponent(node4, ShaderGLDecorator(Shader(vertex_source = VERT_PHONG_MVP, fragment_source=Shader.FRAG_PHONG)))
 
 ##################################################################################################
 
@@ -187,7 +186,6 @@ transUpdate = scene.world.createSystem(TransformSystem("transUpdate", "Transform
 camUpdate = scene.world.createSystem(CameraSystem("camUpdate", "CameraUpdate", "200"))
 renderUpdate = scene.world.createSystem(RenderGLShaderSystem())
 initUpdate = scene.world.createSystem(InitGLShaderSystem())
-
 
 
 # Generate terrain
@@ -202,7 +200,6 @@ terrain_mesh.vertex_attributes.append(colorTerrain)
 terrain_mesh.vertex_index.append(indexTerrain)
 terrain_vArray = scene.world.addComponent(terrain, VertexArray(primitive=GL_LINES))
 terrain_shader = scene.world.addComponent(terrain, ShaderGLDecorator(Shader(vertex_source = Shader.COLOR_VERT_MVP, fragment_source=Shader.COLOR_FRAG)))
-# terrain_shader.setUniformVariable(key='modelViewProj', value=mvpMat, mat4=True)
 
 ## ADD AXES ##
 axes = scene.world.createEntity(Entity(name="axes"))
@@ -213,15 +210,11 @@ axes_mesh.vertex_attributes.append(vertexAxes)
 axes_mesh.vertex_attributes.append(colorAxes)
 axes_mesh.vertex_index.append(indexAxes)
 axes_vArray = scene.world.addComponent(axes, VertexArray(primitive=gl.GL_LINES)) # note the primitive change
-
-# shaderDec_axes = scene.world.addComponent(axes, Shader())
-# OR
 axes_shader = scene.world.addComponent(axes, ShaderGLDecorator(Shader(vertex_source = Shader.COLOR_VERT_MVP, fragment_source=Shader.COLOR_FRAG)))
-# axes_shader.setUniformVariable(key='modelViewProj', value=mvpMat, mat4=True)
+
 
 
 # MAIN RENDERING LOOP
-
 running = True
 scene.init(imgui=True, windowWidth = 1200, windowHeight = 800, windowTitle = "Elements: Let There Be Light", openGLversion = 4, customImGUIdecorator = ImGUIecssDecorator)
 
@@ -248,18 +241,16 @@ eye = util.vec(2.5, 2.5, 2.5)
 target = util.vec(0.0, 0.0, 0.0)
 up = util.vec(0.0, 1.0, 0.0)
 view = util.lookat(eye, target, up)
-# projMat = util.ortho(-10.0, 10.0, -10.0, 10.0, -1.0, 10.0)  
-# projMat = util.perspective(90.0, 1.33, 0.1, 100)  
 projMat = util.perspective(50.0, 1200/800, 0.01, 100.0)   
 
 gWindow._myCamera = view # otherwise, an imgui slider must be moved to properly update
 
 model_terrain_axes = util.translate(0.0,0.0,0.0)
 
-
+BBData = np.array(BB, dtype=np.float32).reshape((len(BB), 16))    # Flatten BB matrices
 
 while running:
-    running = scene.render(running)
+    running = scene.render()
     scene.world.traverse_visit(renderUpdate, scene.world.root)
     scene.world.traverse_visit_pre_camera(camUpdate, orthoCam)
     scene.world.traverse_visit(camUpdate, scene.world.root)
@@ -269,36 +260,35 @@ while running:
     mvp_terrain = projMat @ view @ terrain_trans.trs
     mvp_axes = projMat @ view @ axes_trans.trs
 
-    
-    # mvp_cube = projMat @ view @ model_cube
-    # if alpha > 1:
-    #     alpha = 0
+    MM1 = []
 
-    # MM1 = []
-    # for i in range(len(key1.rotate)):
-    #     MM1.append(np.eye(4))
+    if round(alpha, 2) == 1:
+        flag = True
+    elif round(alpha, 2) == 0:
+        flag = False
 
-    # for i in range(len(key1.rotate)):
-    #     MM1[i][:3, :3] = quat.Quaternion.to_rotation_matrix(quat.quaternion_slerp(key1.rotate[i], key2.rotate[i], alpha))
-    #     MM1[i][:3, 3] = lerp(key1.translate[i], key2.translate[i], alpha)
+    for i in range(len(key1.rotate)):
+        MM1.append(np.eye(4))
 
+    for i in range(len(key1.rotate)):
+        MM1[i][:3, :3] = quat.Quaternion.to_rotation_matrix(quat.quaternion_slerp(key1.rotate[i], key2.rotate[i], round(alpha, 2)))
+        MM1[i][:3, 3] = lerp(key1.translate[i], key2.translate[i], round(alpha, 2))
 
-    # for i in range(len(v)):
-    #     for j in range(4):
-    #         if vw.id[i][j] >=0:
-    #             #mat = key2.array_MM[0][vw.id[i][j]] @ BB[vw.id[i][j]]     
-    #             mat = MM1[vw.id[i][j]] @ BB[vw.id[i][j]]       
-    #             #newv[i] = newv[i] + vw.weight[i][j]*(vertex_apply_M(v[i],mat))
-                 
-    # alpha += 0.05 
+    MM1Data =  np.array(MM1, dtype=np.float32).reshape((len(BB), 16))    # Flatten MM matrices
+
+    if round(alpha, 2) >= 0 and round(alpha, 2) < 1 and flag == False:
+        alpha += 0.05
+    elif round(alpha, 2) > 0 and round(alpha, 2) <= 1 and flag == True:
+        alpha -= 0.05
 
     axes_shader.setUniformVariable(key='modelViewProj', value = mvp_axes, mat4=True)
     terrain_shader.setUniformVariable(key='modelViewProj', value=mvp_terrain, mat4=True)
-
-
+    
     shaderDec4.setUniformVariable(key='modelViewProj', value=mvp_obj, mat4=True)
     shaderDec4.setUniformVariable(key='model', value=trans4.trs, mat4=True)
-    # shaderDec4.setUniformVariable(key='MM', value=mat, mat4=True)
+
+    shaderDec4.setUniformVariable(key='BB', value=BBData, arraymat4=True)
+    shaderDec4.setUniformVariable(key='MM1', value=MM1Data, arraymat4=True)
 
     shaderDec4.setUniformVariable(key='ambientColor', value=Lambientcolor, float3=True)
     shaderDec4.setUniformVariable(key='ambientStr', value=Lambientstr, float1=True)
@@ -308,6 +298,8 @@ while running:
     shaderDec4.setUniformVariable(key='lightIntensity', value=Lintensity, float1=True)
     shaderDec4.setUniformVariable(key='shininess', value=Mshininess, float1=True)
     shaderDec4.setUniformVariable(key='matColor', value=Mcolor, float3=True)
+
+    del MM1
 
     scene.render_post()
     

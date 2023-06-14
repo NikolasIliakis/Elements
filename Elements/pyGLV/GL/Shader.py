@@ -426,6 +426,7 @@ class Shader(Component):
         self._texture3D = None
         
         self._glid = None
+        self._arraymat4fDict = {}
         self._mat4fDict = {}
         self._mat3fDict = {}
         self._float1fDict = {}
@@ -472,6 +473,13 @@ class Shader(Component):
     @mat4fDict.setter
     def mat4fDict(self, value):
         self._mat4fDict = value
+
+    @property
+    def arraymat4fDict(self):
+        return self._arraymat4fDict
+    @arraymat4fDict.setter
+    def arraymat4fDict(self, value):
+        self._arraymat4fDict = value
         
     @property
     def mat3fDict(self):
@@ -525,6 +533,10 @@ class Shader(Component):
     
     def enableShader(self):
         gl.glUseProgram(self._glid)
+        if self._arraymat4fDict is not None:
+            for key, value in self._arraymat4fDict.items():
+                loc = gl.glGetUniformLocation(self._glid, key)
+                gl.glUniformMatrix4fv(loc, len(value), False, value) 
         if self._mat4fDict is not None:
             for key, value in self._mat4fDict.items():
                 loc = gl.glGetUniformLocation(self._glid, key)
@@ -636,7 +648,9 @@ class ShaderGLDecorator(ComponentDecorator):
         # e.g.  loc = GL.glGetUniformLocation(shid, 'projection')
         #       GL.glUniformMatrix4fv(loc, 1, True, projection)
         
-    def setUniformVariable(self,key, value, mat4=False, mat3=False, float1=False, float3=False, float4=False,texture=False,texture3D=False):
+    def setUniformVariable(self,key, value, arraymat4=False, mat4=False, mat3=False, float1=False, float3=False, float4=False,texture=False,texture3D=False):
+        if arraymat4:
+            self.component.arraymat4fDict[key]=value
         if mat4:
             self.component.mat4fDict[key]=value
         if mat3:
