@@ -22,6 +22,7 @@ import Elements.pyECSS.GA.quaternion as quat
 from gate_module_euclidean import *
 from pyassimp import load
 
+#Shader - to be placed on pyGLV.GL.Shader and renamed
 VERT_PHONG_MVP = """
         #version 410
 
@@ -65,11 +66,7 @@ VERT_PHONG_MVP = """
         }
     """
 
-# mat4 mat = MM1[index] * BB[index];
-# newv += vWeight[i] * (vPosition * mat);
-                    # newv = vPosition;
-                    # break;
-
+#LERP function - to be placed on somewhere else
 def lerp(a, b, t):
     return (1 - t) * a + t * b
 
@@ -80,6 +77,7 @@ Lambientstr = 0.3 #uniform ambientStr
 LviewPos = util.vec(2.5, 2.8, 5.0) #uniform viewpos
 Lcolor = util.vec(1.0,1.0,1.0)
 Lintensity = 0.8
+
 #Material
 Mshininess = 0.4 
 Mcolor = util.vec(0.8, 0.0, 0.8)
@@ -131,45 +129,54 @@ colorAxes = np.array([
 indexAxes = np.array((0,1,2,3,4,5), np.uint32) #3 simple colored Axes as R,G,B lines
 
 ##################################################################################################
-scene2 = load('C:/Users/user-P/Desktop/Elements_Home/thes/astroBoy_walk.dae')
+
+#Loading the astroboy model with pyassimp
+figure = load('C:/Users/user-P/Desktop/Elements_Home/thes/astroBoy_walk.dae')
 mesh_id = 3
 
 #Vertices, Incdices/Faces, Bones from the scene we loaded with pyassimp
-mesh = scene2.meshes[mesh_id]
+mesh = figure.meshes[mesh_id]
 v = mesh.vertices
 f = mesh.faces
 b = mesh.bones
+
+#Populating vw with the bone weight and id
 vw = vertex_weight(len(v))
 vw.populate(b)
 
+#Homogenous coordinates for the vertices
 v2 = np.concatenate((v, np.ones((v.shape[0], 1))), axis=1)
 
+#Creating random colors for our vertices, will be removed later
 length = len(v2)
 c = np.random.rand(length, 3)
 c = np.around(c, decimals=1)
 c = np.concatenate((c, np.ones((length, 1))), axis=1)
 
+#Flattening the faces array
 f2 = f.flatten()
 
-#transform = False  
 transform = True
 
+#Initialising M array
 M = initialize_M(b)
 
+#Initialising first keyframe
 M[1] = np.dot(np.diag([1,1,1,1]),M[1])
-key1.array_MM.append(read_tree(scene2,mesh_id,M,transform))
+key1.array_MM.append(read_tree(figure,mesh_id,M,transform))
 
+#Initialising second keyframe
 M[1][0:3,0:3] = eulerAnglesToRotationMatrix([0.3,0.3,0.4])
 M[1][0:3,3] = [0.5,0.5,0.5]
-key2.array_MM.append(read_tree(scene2,mesh_id,M,transform))
+key2.array_MM.append(read_tree(figure,mesh_id,M,transform))
 
+#Initialising BB array
 BB = [b[i].offsetmatrix for i in range(len(b))]
 
-alpha = 0
-flag = False
-
+#Generating normals
 normals = norm.generateNormals(v2 , f2)
 
+#Passing vertices, colors, normals, bone weights, bone ids to the Shader
 mesh4.vertex_attributes.append(v2)
 mesh4.vertex_attributes.append(c)
 mesh4.vertex_attributes.append(normals)
@@ -247,7 +254,11 @@ gWindow._myCamera = view # otherwise, an imgui slider must be moved to properly 
 
 model_terrain_axes = util.translate(0.0,0.0,0.0)
 
-BBData = np.array(BB, dtype=np.float32).reshape((len(BB), 16))    # Flatten BB matrices
+# Flattening BB array to pass as uniform variable
+BBData = np.array(BB, dtype=np.float32).reshape((len(BB), 16))
+
+alpha = 0
+flag = False
 
 while running:
     running = scene.render()
@@ -260,26 +271,36 @@ while running:
     mvp_terrain = projMat @ view @ terrain_trans.trs
     mvp_axes = projMat @ view @ axes_trans.trs
 
+    ######################################################################################
+    #Initialising MM1 to be used as a uniform variable, basically MM after we do SLERP AND LERP
     MM1 = []
 
-    if round(alpha, 2) == 1:
+    #So we can have repeating animation
+    if round(alpha, 3) == 1:
         flag = True
-    elif round(alpha, 2) == 0:
+    elif round(alpha, 3) == 0:
         flag = False
 
+    #Filling MM1 with 4x4 identity matrices
     for i in range(len(key1.rotate)):
         MM1.append(np.eye(4))
 
     for i in range(len(key1.rotate)):
-        MM1[i][:3, :3] = quat.Quaternion.to_rotation_matrix(quat.quaternion_slerp(key1.rotate[i], key2.rotate[i], round(alpha, 2)))
-        MM1[i][:3, 3] = lerp(key1.translate[i], key2.translate[i], round(alpha, 2))
+        #SLERP
+        MM1[i][:3, :3] = quat.Quaternion.to_rotation_matrix(quat.quaternion_slerp(key1.rotate[i], key2.rotate[i], round(alpha, 3)))
+        #LERP
+        MM1[i][:3, 3] = lerp(key1.translate[i], key2.translate[i], round(alpha, 3))
 
-    MM1Data =  np.array(MM1, dtype=np.float32).reshape((len(BB), 16))    # Flatten MM matrices
+    # Flattening MM1 array to pass as uniform variable
+    MM1Data =  np.array(MM1, dtype=np.float32).reshape((len(BB), 16))
 
-    if round(alpha, 2) >= 0 and round(alpha, 2) < 1 and flag == False:
-        alpha += 0.05
-    elif round(alpha, 2) > 0 and round(alpha, 2) <= 1 and flag == True:
-        alpha -= 0.05
+    #So we can have repeating animation
+    if round(alpha, 3) >= 0 and round(alpha, 3) < 1 and flag == False:
+        alpha += 0.025
+    elif round(alpha, 3) > 0 and round(alpha, 3) <= 1 and flag == True:
+        alpha -= 0.025
+
+    ######################################################################################
 
     axes_shader.setUniformVariable(key='modelViewProj', value = mvp_axes, mat4=True)
     terrain_shader.setUniformVariable(key='modelViewProj', value=mvp_terrain, mat4=True)
@@ -287,6 +308,7 @@ while running:
     shaderDec4.setUniformVariable(key='modelViewProj', value=mvp_obj, mat4=True)
     shaderDec4.setUniformVariable(key='model', value=trans4.trs, mat4=True)
 
+    #Passing BB and MM1 to the shader. We created a new type, arraymat4 to pass the our uniforms.
     shaderDec4.setUniformVariable(key='BB', value=BBData, arraymat4=True)
     shaderDec4.setUniformVariable(key='MM1', value=MM1Data, arraymat4=True)
 
@@ -299,6 +321,7 @@ while running:
     shaderDec4.setUniformVariable(key='shininess', value=Mshininess, float1=True)
     shaderDec4.setUniformVariable(key='matColor', value=Mcolor, float3=True)
 
+    #Deleting MM1
     del MM1
 
     scene.render_post()
