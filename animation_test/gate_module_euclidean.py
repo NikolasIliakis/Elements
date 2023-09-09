@@ -4,7 +4,6 @@ warnings.filterwarnings('ignore')
 import numpy as np
 from numpy import e,pi
 from pyassimp import *
-import pyassimp
 import meshplot as mp
 import math
 # from numba import jit,njit
