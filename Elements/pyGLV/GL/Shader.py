@@ -315,7 +315,7 @@ class Shader(Component):
         #version 410
 
         layout (location=0) in vec4 vPosition;
-        layout (location=2) in vec2 vTexCoord;
+        layout (location=1) in vec2 vTexCoord;
         layout (location=2) in vec4 vNormal;
         layout (location=3) in vec4 vWeight;
         layout (location=4) in vec4 vWID;
